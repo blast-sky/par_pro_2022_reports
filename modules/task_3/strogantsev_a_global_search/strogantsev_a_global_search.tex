@@ -1,0 +1,593 @@
+\documentclass[14pt, a4paper]{extarticle}
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage{babel}
+\usepackage[a4paper,
+left=2cm,
+right=2cm,
+top=2cm,
+bottom=2cm]{geometry}
+\usepackage{color}
+\usepackage{mathtools}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{tocloft}
+\usepackage{indentfirst}
+\usepackage{enumitem}
+
+\setlength{\parindent}{0.8cm}
+\setlength{\parskip}{0.4cm}
+\renewcommand{\contentsname}{}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{frame=none,
+	language=C++,
+	aboveskip=3mm,
+	belowskip=3mm,
+	showstringspaces=false,
+	columns=flexible,
+	basicstyle={\small\ttfamily},
+	numbers=none,
+	numberstyle=\tiny\color{gray},
+	keywordstyle=\color{blue},
+	commentstyle=\color{dkgreen},
+	stringstyle=\color{mauve},
+	breaklines=true,
+	breakatwhitespace=true,
+	tabsize=4
+}
+
+\title{}
+\author{}
+\date{}
+
+\begin{document}
+	\begin{titlepage}
+		\begin{center}
+			{\bfseries МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ \\
+				РОССИЙСКОЙ ФЕДЕРАЦИИ}
+			\\
+			Федеральное государственное автономное образовательное учреждение высшего образования
+			\\
+			{\bfseries «Национальный исследовательский Нижегородский государственный университет им. Н.И. Лобачевского»\\(ННГУ)
+				\\Институт информационных технологий, математики и механики} \\
+		\end{center}
+
+		\vspace{8em}
+
+		\begin{center}
+			ОТЧЕТ \\ по лабораторной работе \\
+			«Алгоритм глобального поиска (Стронгина) для одномерных задач оптимизации. 
+			Распараллеливание по характеристикам»
+		\end{center}
+
+		\vspace{5em}
+
+
+		\begin{flushright}
+			{\bfseries Выполнил:} студент группы\\382006-2\\Строганцев А.М. \underline{\hspace{3cm}} \linebreak\linebreak\linebreak
+			{\bfseries Проверил:} младший научный\\сотрудник\\Нестеров А.Ю. \underline{\hspace{3cm}} 
+		\end{flushright}
+
+
+		\vspace{\fill}
+
+		\begin{center}
+			Нижний Новгород\\2023
+		\end{center}
+
+	\end{titlepage}
+
+	\tableofcontents
+	\thispagestyle{empty}
+	\newpage
+
+	\pagestyle{plain}
+	\setcounter{page}{3}
+
+	\section{Введение}
+	Алгоритм глобального поиска Стронгина - один из методов, использующихся для решения задач нахождения оптимальных решений. Позволяет находить глобальный оптимум в одномерном и многомерном случае.
+	\newpage
+
+	\section{Постановка задачи}
+	Следует реализовать рабочий вариант библиотеки/приложения, позволяющей интегрировать и использовать последовательную и параллельную версию алгоритма глобального поиска Стронгина для одномерных задач оптимизации.
+
+	Программа должна быть реализована с помощью технологии MPI на языке C++. Корректным результатом работы в каждом из тестовых кейсов является нахождение глобального минимума переданной функции на заданном отрезке с установленной точностью. Также для установления некоторых закономерностей и проделывания выводов необходимо замерять время работы каждой версии алгоритма.
+
+	Далеее подведем итоги, где сравним реализации алгоритма между собой.
+	\newpage
+
+	\section{Описание алгоритма}
+	Для начала своей работы каждая реализация алгоритма требует определения нескольких входных параметров:
+	\begin{itemize}
+		\item $f$ - функция, для которой будет найден глобальный минимум;
+		\item $[a,b]$ - отрезок, на котором нужно найти глобальный минимум $f$;
+		\item $\varepsilon$ – точность, с которой будет найден глобальный минимум.
+	\end{itemize}
+
+	\textbf{Описание метода:}\\
+	Имеется список отрезков (удобно хранить в виде упорядоченного множества точек), изначально заполненный одним значением: отрезок $[a,b]$.
+
+	\noindent Для каждой итерации метода должны быть произведены шаги:
+	\begin{enumerate}
+		\item Вычисление характеристики ($R$) для каждого из отрезков (на первой итерации только для одного отрезка: $[a,b]$).\\\\
+		Пусть $a_j$ - левая граница конкретного отрезка, а $b_j$ - правая.\\
+		И $f_a = f(a_j)$, а $f_b = f(b_j)$.
+		Тогда:
+		$$ R = m * (b - a) + \frac{(f_b - f_a)^2}{m * (b - a)} - 2(f_b + f_a). $$
+		При этом константа Липшица ($m$) может быть найдена по формуле:
+		$$ m = 
+		\begin{cases}
+				1, & M = 0 \\
+				rM, & M > 0
+		\end{cases},\;\;\;
+		M = \max_{[a_i, b_i] \in S} \left| \frac{f(a_i) - f(b_i)}{b_i - a_i} \right|. $$
+		$S$ (segments) - множество полученных на данный момент отрезков.
+		\item Нахождение отрезка, в котором эта характеристика ($R$) максимальна.
+		\item Вычисление координат новой точки разбиения ($c$). (На первой итерации эта точка будет лежать на отрезке $[a,b]$, что приведет к преобразованию списка отрезков в $[a,c], [c,b]$).\\\\
+		Пусть $[a_r, b_r]$ - отрезок с максимальной характеристикой $R$, полученный на прошлом шаге. Тогда:
+		$$ c = a_r + \frac{b_r - a_r}{2} + \frac{f(b_r) - f(a_r)}{2 * m}. $$
+		\item Проверка попадания новой точки в эпсилон окрестность одного из концов отрезка с максимальной характеристикой.
+		$$ c - a_r < \epsilon. $$
+		\begin{itemize}
+		    \item Если новая точка входит в эту окрестность, то прервать итерации и вернуть результат: $f(c)$.
+		    \item Иначе перейти к пункту 5.
+		\end{itemize}
+		\item Разбиение одного из имеющихся отрезков на два новых точкой $c$. Вернуться к пункту 1.
+	\end{enumerate}
+	\newpage
+
+	\section{Описание схемы распараллеливания.}
+	\textbf{Распараллеливание по характеристикам.}\\
+	Параллельная модификация, по сути, заключается в изменении лишь 2-го шага основного алгоритма. Если в последовательном случае мы брали один отрезок с максимальной характеристикой, то при параллельной модификации будем брать $n$ первых отрезков с наибольшими характеристиками ($n$ = минимум из количества доступных отрезков и числа активных процессов). Дальнейшие шаги алгоритма остаются неизменными.
+
+	\newpage
+
+	\section{Описание схемы MPI}
+
+	\textbf{Алгоритм главного процесса.}\\
+	На каждой итерации главный процесс должен выполнить ряд операций:
+	\begin{enumerate}
+		\item Вычислить характеристики для каждого из отрезков.
+		\item Отсортировать характеристики по невозрастанию.
+		\item Определить число активных процессов ($n$) на данной итерации алгоритма.
+		\item Отправить всем процессам число активных процессов ($n$).
+		\item Отправить активным процессам необходимые для работы данные (границы конкретного отрезка и константу Липшица).
+		\item Выполнить алгоритм неглавного процесса.
+		\item Принять и обработать данные от активных процессов. С помощью них определить нужна ли еще одна итерация алгоритма (4-ый пункт в разделе "Описание алгоритма").
+		\item Отправить всем процессам флаг намерения проделать еще одну итерацию алгоритма.
+	\end{enumerate}
+
+	\textbf{Алгоритм неглавного процесса.}\\
+	На каждой итерации неглавный процесс должен выполнить ряд операций:
+	\begin{enumerate}
+		\item Получить от главного процесса число активных процессов ($n$) и определить свой статус (активный/неактивный, главный процесс всегда активный).\\\\
+		Если процесс является активным:
+		\begin{enumerate}
+			\item Получить необходимые данные от главного процесса.
+			\item Выполнить 3-ий и 4-ый пункт в разделе "Описание алгоритма".
+			\item Отправить результат работы главному процессу.
+  		\end{enumerate}
+		\item Принять от главного процесса флаг о намерении проделать еще одну итерацию алгоритма.
+	\end{enumerate}
+
+	\newpage
+
+	\section{Результаты экспериментов}
+	\noindent\textbf{Каждый тестовый кейс определяется набором данных:}
+	\begin{itemize}
+		\item $f$ - функция, для которой будет найден глобальный минимум;
+		\item $[a,b]$ - отрезок, на котором нужно найти глобальный минимум $f$;
+		\item $\varepsilon$ – точность, с которой будет найден глобальный минимум ($10^{-3}$ для всех экспериментов);
+		\item $res$ - ожидаемый результат работы.
+	\end{itemize}
+	\noindent\textbf{Тестовый набор:}
+	\begin{enumerate}
+		\item $f(x) = \sin(x)$,  $[a, b] = [-\pi, \pi]$, $res = -1$.
+		\item $f(x) = \cos(x)$,  $[a, b] = [-\pi/2, \pi/2]$, $res = 0$.
+		\item $f(x) = x^2$,  $[a, b] = [-100, 1000]$, $res = 0$.
+		\item $f(x) = \sqrt{x}$, $[a, b] = [4, 1000]$, $res = 2$.
+		\item $f(x) = \sin(2x\sin(x)\cos(x)) + \sin(-x \cos(x))$,  $[a, b] = [2\pi, 3\pi]$, $res = -2$.
+	\end{enumerate}
+
+	\noindent\textbf{Результаты измерения времени работы (в секундах):}\\\\
+\begin{tabular}{|c | c | c | c | c | c |} 
+	\hline
+	Тест & 1 процесс (посл.) & 1 процесс (пар.) & 2 процесса & 3 процесса & 4 процессов \\
+	\hline
+	1 & 0.0012847 & 0.0011364  & 0.001294 & 0.0042778 & 0.0037169 \\ 
+	\hline
+	2 & 2.43993e-05 & 1.82996e-05 & 1.79997e-05 & 1.54377e-05 & 2.21002e-05 \\
+	\hline
+	3 & 0.210389  & 0.197835 & 0.116061 & 0.110401  & 0.109183 \\
+	\hline
+	4 & 1.89999e-05  & 2.22996e-05 & 3.87002e-05 & 4.36995e-05  & 6.84001e-05 \\
+	\hline
+	5 & 0.0004474  & 0.0004686 & 0.000235801 & 0.0002818  & 0.0002988 \\
+	\hline
+\end{tabular}
+
+	\newpage
+
+	\section{Вывод}
+	Основываясь на полученные данные в результате экспериментов, можно сделать вывод: параллельный алгоритм проявляет себя лучше последовательного в условиях "сложной" входной функции (эксперимент 5), если же функция вычисляется быстро, то наблюдается увеличение времени работы в связи с дополнительными операциями взаимодействия процессов, причем чем больше процессов, тем больше отставание от последовательного варианта.
+
+	\newpage
+
+	\section{Заключение}
+	В ходе выполнения работы были изучены и успешно реализованы\\ последовательный и параллельный варианты алгоритма глобального поиска Стронгина для одномерных задач оптимизации.\\\\
+	В ходе экспериментов удалось выяснить, что параллельный алгоритм проявляет себя лучше последовательного в условиях долговычислимой функции.\\\\
+	Также во время выполнения работы были изучены концепции распараллеливания программ на уровне процессов, в частности реализация библиотеки MPI на C++.
+ 
+	\newpage
+
+	\section{Литература}
+	\begin{enumerate}
+		\item wikipedia : сайт. – URL: https://ru.wikipedia.org/wiki/Метод\_\\Стронгина (дата обращения: 19.11.2022)
+		\item hpcc.unn.ru : сайт. – URL: http://www.hpcc.unn.ru/?dir=893\\(дата обращения: 19.11.2022)
+		\item open-mpi : сайт. – URL: https://www.open-mpi.org/doc/\\(дата обращения: 19.11.2022)
+	\end{enumerate}
+	\newpage
+
+	\section{Приложение}
+
+	\subsection{main.cpp}
+	\begin{lstlisting}
+// Copyright 2022 Strogantsev Anton
+#include <gtest/gtest.h>
+#include <iostream>
+#include <cmath>
+#include "./global_search.h"
+#include <gtest-mpi-listener.hpp>
+
+const double pi = 3.1415;
+const double epsilon = 0.01;
+
+TEST(GlobalSearch, SinMinus1) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    auto fun = [](double x) { return std::sin(x); };
+    double left = -pi;
+    double right = pi;
+    double expectedMin = -1;
+
+    double result = globalSearchParallel(fun, left, right, epsilon * 0.1);
+
+    if (rank == 0) {
+        ASSERT_NEAR(expectedMin, result, epsilon);
+    }
+}
+
+TEST(GlobalSearch, CosMinus1) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    auto fun = [](double x) { return std::cos(x); };
+    double left = 0;
+    double right = 2 * pi;
+    double expectedMin = -1;
+
+    double result = globalSearchParallel(fun, left, right, epsilon * 0.1);
+
+    if (rank == 0) {
+        ASSERT_NEAR(expectedMin, result, epsilon);
+    }
+}
+
+TEST(GlobalSearch, CosZero) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    auto fun = [](double x) { return std::cos(x); };
+    double left = -pi / 2;
+    double right = pi / 2;
+    double expectedMin = 0;
+
+    double result = globalSearchParallel(fun, left, right, epsilon * 0.1);
+
+    if (rank == 0) {
+        ASSERT_NEAR(expectedMin, result, epsilon);
+    }
+}
+
+TEST(GlobalSearch, SquareZero) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    auto fun = [](double x) { return x * x; };
+    double left = -100;
+    double right = 1000;
+    double expectedMin = 0;
+
+    double result = globalSearchParallel(fun, left, right, epsilon * 0.1);
+
+    if (rank == 0) {
+        ASSERT_NEAR(expectedMin, result, epsilon);
+    }
+}
+
+TEST(GlobalSearch, SqrtTwo) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    auto fun = [](double x) { return std::sqrt(x); };
+    double left = 4;
+    double right = 1000;
+    double expectedMin = 2;
+
+    double result = globalSearchParallel(fun, left, right, epsilon * 0.1);
+
+    if (rank == 0) {
+        ASSERT_NEAR(expectedMin, result, epsilon);
+    }
+}
+
+TEST(GlobalSearch, ComplexFun) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    auto fun = [](double x) { return std::sin(2 * x * std::sin(x) * std::cos(x)) + std::sin(-x * std::cos(x)); };
+    double left = 2 * pi;
+    double right = 3 * pi;
+    double expectedMin = -2;
+
+    double result = globalSearchParallel(fun, left, right, epsilon * 0.1);
+
+    if (rank == 0) {
+        ASSERT_NEAR(expectedMin, result, epsilon);
+    }
+}
+
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    MPI_Init(&argc, &argv);
+
+    ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+    ::testing::TestEventListeners& listeners =
+        ::testing::UnitTest::GetInstance()->listeners();
+
+    listeners.Release(listeners.default_result_printer());
+    listeners.Release(listeners.default_xml_generator());
+
+    listeners.Append(new GTestMPIListener::MPIMinimalistPrinter);
+    return RUN_ALL_TESTS();
+}
+	\end{lstlisting}
+	\newpage
+	\subsection{global\_search.h}
+	\begin{lstlisting}
+// Copyright 2022 Strogantsev Anton
+#ifndef MODULES_TASK_3_STROGANTSEV_A_GLOBAL_SEARCH_GLOBAL_SEARCH_H_
+#define MODULES_TASK_3_STROGANTSEV_A_GLOBAL_SEARCH_GLOBAL_SEARCH_H_
+
+#include <functional>
+#include <utility>
+#include <vector>
+
+namespace TAG {
+    const int FINDED = 1;
+    const int UNFINDED = 2;
+}
+
+const double parameterR = 2.0;
+
+using RAndIndex = std::pair<double, int>;
+
+double getMiddle(double a, double b);
+
+double getParameterM(const std::vector<double>& points, std::function<double(double)> fun);
+
+double getParameterLipschitz(double parameterM, double parameterR);
+
+std::vector<RAndIndex> getParametersR(
+    const std::vector<double>& points,
+    std::function<double(double)> fun,
+    double parameter_m
+);
+
+double getNextX(double point0, double point1, std::function<double(double)> fun, double parameter_m);
+
+double getNextX(
+    const std::vector<double>& points,
+    std::function<double(double)> fun,
+    int indexOfMaxR,
+    double parameter_m
+);
+
+double globalSearchParallel(std::function<double(double)> fun, double a, double b, double epsilone);
+
+double globalSearchSequentially(std::function<double(double)> fun, double a, double b, double epsilone);
+
+#endif  // MODULES_TASK_3_STROGANTSEV_A_GLOBAL_SEARCH_GLOBAL_SEARCH_H_
+	\end{lstlisting}
+	\newpage
+	\subsection{global\_search.cpp}
+	\begin{lstlisting}
+// Copyright 2022 Strogantsev Anton
+#include <mpi.h>
+#include <vector>
+#include <algorithm>
+#include "../../../modules/task_3/strogantsev_a_global_search/global_search.h"
+
+const int maxIterationCount = 50000;
+
+double getMiddle(double a, double b) {
+    return (a + b) / 2.0;
+}
+
+double getParameterM(const std::vector<double>& points, std::function<double(double)> fun) {
+    double M = std::numeric_limits<double>::min();
+    for (size_t i = 1; i < points.size(); i++) {
+        double z1 = fun(points[i]);
+        double z0 = fun(points[i - 1]);
+        double currentM = std::abs((z1 - z0) / (points[i] - points[i - 1]));
+        M = std::max(currentM, M);
+    }
+    return M;
+}
+
+double getParameterLipschitz(double parameterM, double parameterR) {
+    return (parameterM == 0) ? 1 : parameterR * parameterM;
+}
+
+std::vector<RAndIndex> getParametersR(
+    const std::vector<double>& points,
+    std::function<double(double)> fun,
+    double parameter_m
+) {
+    std::vector<RAndIndex> characteristicR;
+    for (size_t i = 1; i < points.size(); i++) {
+        double z1 = fun(points[i]);
+        double z0 = fun(points[i - 1]);
+        double pointsDiff = (points[i] - points[i - 1]);
+        double currentR = parameter_m * pointsDiff +
+            (z1 - z0) * (z1 - z0) / (parameter_m * pointsDiff) -
+            2 * (z1 + z0);
+        characteristicR.push_back(std::make_pair(currentR, i));
+    }
+    return characteristicR;
+}
+
+double getNextX(
+    double point0,
+    double point1,
+    std::function<double(double)> fun,
+    double parameter_m
+) {
+    double z1 = fun(point0);
+    double z0 = fun(point1);
+    return point0 + (point1 - point0) / 2.0 +
+        (z1 - z0) / (2.0 * parameter_m);
+}
+
+double getNextX(
+    const std::vector<double>& points,
+    std::function<double(double)> fun,
+    int indexOfMaxR,
+    double parameter_m
+) {
+    return getNextX(points[indexOfMaxR - 1], points[indexOfMaxR], fun, parameter_m);
+}
+
+double globalSearchParallel(std::function<double(double)> fun, double a, double b, double epsilone) {
+    int rank, count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &count);
+
+    std::vector<double> sortedX = { a, b };
+
+    int iterationCount = 0;
+    while (iterationCount++ < maxIterationCount) {
+        std::vector<double> inputBuffer(3);
+        int workedProcessCount = count;
+
+        if (rank == 0) {
+            double M = getParameterM(sortedX, fun);
+            double m = getParameterLipschitz(M, parameterR);
+            auto characteristicR = getParametersR(sortedX, fun, m);
+
+            std::sort(characteristicR.begin(), characteristicR.end(), [](const RAndIndex& p1, const RAndIndex& p2) {
+                return p1.first > p2.first;
+            });
+
+            int indexOfMaxR = characteristicR.front().second;
+            inputBuffer = { sortedX[indexOfMaxR - 1], sortedX[indexOfMaxR], m };
+
+            workedProcessCount = std::min(static_cast<size_t>(count), characteristicR.size());
+            for (int i = 1; i < workedProcessCount; i++) {
+                RAndIndex r = characteristicR[i];
+                std::vector<double> outputBuffer = { sortedX[r.second - 1], sortedX[r.second],  m };
+                MPI_Send(outputBuffer.data(), 3, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+            }
+        }
+
+        MPI_Bcast(&workedProcessCount, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        if (rank != 0 && rank < workedProcessCount) {
+            MPI_Status status;
+            MPI_Recv(inputBuffer.data(), 3, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
+        }
+
+        bool isResultFinded = false;
+        double result = 0.0;
+        if (rank < workedProcessCount) {
+            double nextX = getNextX(inputBuffer[0], inputBuffer[1], fun, inputBuffer[2]);
+
+            int tag = TAG::UNFINDED;
+            if (std::abs(nextX - inputBuffer[0]) < epsilone) {
+                tag = TAG::FINDED;
+            }
+
+            if (rank != 0) {
+                MPI_Send(&nextX, 1, MPI_DOUBLE, 0, tag, MPI_COMM_WORLD);
+            } else {
+                for (int i = 1; i < workedProcessCount; i++) {
+                    double inputNextX;
+                    MPI_Status status;
+                    MPI_Recv(&inputNextX, 1, MPI_DOUBLE, i, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+                    if (status.MPI_TAG == TAG::FINDED) {
+                        result = inputNextX;
+                        isResultFinded = true;
+                    }
+
+                    auto upperBound = std::upper_bound(sortedX.begin(), sortedX.end(), inputNextX);
+                    sortedX.insert(upperBound, inputNextX);
+                }
+
+                if (tag == TAG::FINDED) {
+                    result = nextX;
+                    isResultFinded = true;
+                }
+
+                auto upperBound = std::upper_bound(sortedX.begin(), sortedX.end(), nextX);
+                sortedX.insert(upperBound, nextX);
+            }
+        }
+
+        MPI_Bcast(&isResultFinded, 1, MPI_BYTE, 0, MPI_COMM_WORLD);
+        if (isResultFinded) return fun(result);
+    }
+    return std::numeric_limits<double>::max();
+}
+
+double globalSearchSequentially(std::function<double(double)> fun, double a, double b, double epsilone) {
+    std::vector<double> sortedX = { a, b };
+
+    while (sortedX.size() < maxIterationCount) {
+        double M = getParameterM(sortedX, fun);
+        double m = getParameterLipschitz(M, parameterR);
+        auto characteristicR = getParametersR(sortedX, fun, m);
+
+        std::sort(characteristicR.begin(), characteristicR.end(), [](const RAndIndex& p1, const RAndIndex& p2) {
+            return p1.first > p2.first;
+        });
+
+        size_t indexOfMaxR = characteristicR.front().second;
+
+        double nextX = getNextX(sortedX, fun, indexOfMaxR, m);
+
+        if (std::abs(nextX - sortedX[indexOfMaxR - 1]) < epsilone)
+            return fun(nextX);
+
+        auto upperBound = std::upper_bound(sortedX.begin(), sortedX.end(), nextX);
+
+        sortedX.insert(upperBound, nextX);
+    }
+    return std::numeric_limits<double>::max();
+}
+
+	\end{lstlisting}
+	\newpage
+
+\end{document}
